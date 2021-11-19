@@ -7,11 +7,13 @@
 <body>
     <h1>MSE Demo</h1>
     <div>
-        <video controls width="80%"></video>
+        <video id="video_element" controls width="80%"></video>
     </div>
+    <button class="btn_play">play</button>
+<!-- <script type="module" src="index.js"></script> -->
     <script type="text/javascript">
     (function () {
-        var mime = 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+        var mime = 'video/mp4; codecs="avc1.42E01F, mp4a.40.2"';
 
         if (!MediaSource.isTypeSupported(mime)) {
             document.querySelector('h1').append(' - Unsuported mime type :(');
@@ -21,12 +23,104 @@
 
         var buffer;
         var websocket;
+        let data;
+        let dataBuffer = [];
+        let bu = [];
+        let minBuff = [];
+        let appended;
+        // function send(data) {
+        //     let ws = this._ws;
+        //     // console.log('WS',ws);
+        //     let resolution;
+        //     if (data.includes('360')) {
+        //         resolution = Number(data);
+        //         let bin = JSON.stringify({ resolution });
 
-        // Pre alloc buffer due updating delay
+        //         function strToAb(str) {
+        //             return new Uint8Array(str.split('')
+        //             .map(c => c.charCodeAt(0))).buffer;
+        //         }
+
+        //         ws.send(strToAb(bin));
+        //     } else if (data.includes('720')) {
+        //         resolution = Number(data);
+        //         let bin = JSON.stringify({ resolution });
+
+        //         function strToAb(str) {
+        //             return new Uint8Array(str.split('')
+        //             .map(c => c.charCodeAt(0))).buffer;
+        //         }
+
+        //         ws.send(strToAb(bin));
+        //     } else if (data.includes('1080')) {
+        //         resolution = Number(data);
+        //         let bin = JSON.stringify({ resolution });
+
+        //         function strToAb(str) {
+        //             return new Uint8Array(str.split('')
+        //             .map(c => c.charCodeAt(0))).buffer;
+        //         }
+
+        //         ws.send(strToAb(bin));
+        //     } 
+        // }
+
+        function toInt(arr, index) { 
+            var dv;
+            if (arr.buffer.byteLength > 10) {
+                // websocket.send(dv);
+                dv = new DataView(arr.buffer);
+            }
+            console.log(dv, index);
+            return dv.getInt32(index, false); 
+        }
+
+        function toString(arr, fr, to) { 
+            return String.fromCharCode.apply(null, arr.slice(fr,to));
+        }
+
+        function getBox(arr, i) { 
+            return [toInt(arr, i), toString(arr, i+4, i+8)]
+        }
+
+        function getSubBox(arr, box_name) { 
+            var i = 0;
+            let res = getBox(arr, i);
+            let main_length = res[0]; name = res[1]; 
+            i = i + 8;
+            
+            var sub_box = null;
+            
+            while (i < main_length) {
+                res = getBox(arr, i);
+                l = res[0]; name = res[1];
+                
+                if (box_name == name) {
+                    sub_box = arr.slice(i, i+l)
+                }
+                i = i + l;
+            }
+            return sub_box;
+        }
+
+        function hasFirstSampleFlag(arr) {
+            
+            var traf = getSubBox(arr, "traf");
+            if (traf==null) { return false; }
+            
+            var trun = getSubBox(traf, "trun");
+            if (trun==null) { return false; }
+            
+            var flags = trun.slice(10,13);
+            f = flags[1] & 4; 
+            // console.log('okok');
+            return f == 4;
+        }
+
         var buffer_size = 5*1024*1024;
         var buffer_index = 0;
         var frag_mp4_buffer = new Uint8Array(buffer_size);
-        var video = document.querySelector('video');
+        var video = document.getElementById('video_element');
         var mediaSource = new MediaSource();
 
         mediaSource.addEventListener('sourceended', function(e) { console.log('sourceended: ' + mediaSource.readyState); });
@@ -38,39 +132,195 @@
         mediaSource.addEventListener('sourceopen', function(e) {
             console.log('sourceopen: ' + mediaSource.readyState);
 
+            video.muted = true;
             video.play();
 
             buffer = mediaSource.addSourceBuffer(mime);
 
+            buffer.mode = 'segments';
+
             buffer.addEventListener('updateend', function(e) {
                 if (video.duration && !video.currentTime) {
-                    video.currentTime = video.duration;
+                    // video.currentTime = video.duration;
+                    video.currentTime = video.buffered.end(0);
                 }
             });
 
-            var websocket = new WebSocket('ws://' + document.location.hostname +':8082');
+            websocket = new WebSocket('wss://stage.cloud.atmosfera.cam/ws-mse/mr-rust-main/');
             websocket.binaryType = 'arraybuffer';
 
-            websocket.addEventListener('message', function(e) {
-                var data = new Uint8Array(e.data);
-
-                if (data.length) {
-                    if((buffer_index + data.length) <= buffer_size){
-                        frag_mp4_buffer.set(data, buffer_index);
-                        buffer_index = buffer_index + data.length;
-
-                        if (!buffer.updating && mediaSource.readyState == 'open') {
-                            var appended = frag_mp4_buffer.slice(0, buffer_index);
-
-                            buffer.appendBuffer(appended);
-
-                            frag_mp4_buffer.fill(0);
-                            buffer_index = 0;
-                        }
-                    }
+            websocket.onopen = function() {
+                let resolution = 720;
+                let bin = JSON.stringify({ resolution });
+                
+                function strToAb(str) {
+                    return new Uint8Array(str.split('')
+                    .map(c => c.charCodeAt(0))).buffer;
                 }
+
+
+
+                websocket.send(strToAb(bin));
+
+                // setInterval(() => {
+                //     if (resolution === 1080) {
+                //         resolution = 360;
+                //     } else if (resolution === 720) {
+                //         resolution = 1080;
+                //     } else if (resolution === 360) {
+                //         resolution = 720;
+                //     }
+                //     let bin = JSON.stringify({ resolution });
+                //     function strToAb(str) {
+                //         return new Uint8Array(str.split('')
+                //         .map(c => c.charCodeAt(0))).buffer;
+                //     }
+
+                //     websocket.send(strToAb(bin));
+                // }, 5000);
+            }; 
+
+            websocket.addEventListener('message', function(e) {
+                websocket.send('PING');
+
+                if (e.data instanceof ArrayBuffer) {
+                    const arrayBuffer = new Promise((resolve, reject) => {
+                        if(e.data !== null) {
+                            resolve({status: 'e.data true'});
+                        } else {
+                            reject({status: 'e.data false'});
+                        }
+                    });
+                    arrayBuffer
+                        .then((data) => {
+                            data = new Uint8Array(e.data);
+                            dispatchData(data);
+                        })
+                        .catch((error) => {
+                            // if (e.data.byteLength < 10) {
+                            //     minBuff.push(e.data);
+                            //     console.log('minBuff', minBuff);
+                            // } else {
+                                
+                            //     data = new Uint8Array(minBuff.pop());
+                            // }
+                            console.log(error);
+                        });
+                }
+
+
+                // data = new Uint8Array(e.data);
+
+                // let res = getBox(data, 0);
+                // // console.log(res);
+                // let main_length = res[0]; name = res[1];
+                // // console.log(name);
+
+                // if (data.length) {
+                //     if((buffer_index + data.length) <= buffer_size){
+                //         frag_mp4_buffer.set(data, buffer_index);
+                //         // console.log(frag_mp4_buffer, buffer_index);
+                        
+                //         buffer_index = buffer_index + data.length;
+                //         // console.log(buffer_index);
+
+                //         if (!buffer.updating && mediaSource.readyState == 'open') {
+                //             let appended = frag_mp4_buffer.slice(0, buffer_index);
+                //             // console.log(appended.buffer);
+
+                //             // if (appended.byteLength <= 4096) {
+                //             //     append_burred += appended;
+                //                 // console.log('append_burred', append_burred)
+                //             // } else {
+                //                 buffer.appendBuffer(appended);
+                //             // }
+                //             // if (name=="moof") {
+                //             //     if (hasFirstSampleFlag(data)) {
+                //                     // pass = pass + 1;
+                //                     // buffer.appendBuffer(appended);
+                //                     // console.log(buffer);
+                //                 // }
+                //                 // else {
+                //                 //     return;
+                //                 // }
+                //             // }
+
+                //             // frag_mp4_buffer.fill(0);
+                //             buffer_index = 0;
+                //         }
+                //     }
+                // }
             }, false);
         }, false);
+
+        function dispatchData(data) {
+            let charCode = String.fromCharCode.apply(null, data.slice(0 + 4,0 + 8))
+            // console.log(charCode);
+
+            // console.log(video.readyState);
+
+            
+            // var sourceBufferList = mediaSource.activeSourceBuffers;
+            // console.log(sourceBufferList);
+            
+            let ind = toInt(data, 0);
+            // console.log(ind);
+
+            dataBuffer.push(data);
+
+            res = getBox(data, 0);
+
+            bu = dataBuffer.pop();
+
+            console.log(bu.byteLength);
+            // console.log(dataBuffer);
+
+            if (data.byteLength < 10) {
+                
+            }
+
+            
+            let main_length = res[0]; name = res[1];
+            // console.log(name);
+
+            if (bu.length) {
+                if((buffer_index + bu.length) <= buffer_size){
+                    if (bu.byteLength > 10) {
+                        frag_mp4_buffer.set(bu, buffer_index);
+                    }
+                    buffer_index = buffer_index + bu.length;
+                    
+                    // console.log(frag_mp4_buffer.byteLength, frag_mp4_buffer.slice(0, 4096));
+                    // console.log('update', buffer.updating);
+
+                    if (!buffer.updating && mediaSource.readyState == 'open') {
+                        appended = frag_mp4_buffer.slice(0, buffer_index);
+
+                        // console.log(appended.buffer);
+
+                        // if (appended.byteLength <= 4096) {
+                        //     append_burred += appended;
+                        // } else {
+                            buffer.appendBuffer(appended);
+                        // }
+                        // console.log(appended);
+                        // if (name=="moof" || name !== 'moof') {
+                        //     if (hasFirstSampleFlag(data)) {
+                        //         pass = pass + 1;
+                        //         buffer.appendBuffer(appended);
+                        //         console.log(buffer);
+                        //     }
+                        //     else {
+                        //         return;
+                        //     }
+                        // }
+
+                        frag_mp4_buffer.fill(0);
+                        buffer_index = 0;
+                    }
+                }
+            }
+        }
     })();
     </script>
 </body>

@@ -9,14 +9,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eventials/poc-mp4-websocket.git"
+    "url": "git+https://github.com/nikolaiivanov93/live-mp4.git"
   },
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/eventials/poc-mp4-websocket/issues"
-  },
-  "homepage": "https://github.com/eventials/poc-mp4-websocket#readme",
   "dependencies": {
     "big-integer": "^1.6.22",
     "ws": "^2.3.1",
